@@ -2,6 +2,6 @@
 /data1/
 /shape_file_geom_error/
 /.idea/
-my_paths.py
-error_logger.log
-logger.log
+/my_paths.py
+/error_logger.log
+/logger.log
