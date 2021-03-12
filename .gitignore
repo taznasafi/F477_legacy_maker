@@ -5,3 +5,6 @@
 /my_paths.py
 /error_logger.log
 /logger.log
+/bin/__pycache__/
+/F477_legacy_maker/__pycache__/
+/__pycache__/
