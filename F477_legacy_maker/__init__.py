@@ -1,5 +1,5 @@
 import os
-
+from sys import exit
 # create initial Data folder for input and output
 if not os.path.exists(r'./data'):
     os.mkdir(r'./data')
@@ -21,3 +21,10 @@ if not os.path.exists(output_csv_path):
     os.mkdir(output_csv_path)
 
 
+if not os.path.exists('my_paths.py'):
+    print("PLEASE CREATE A PYTHON FILE CALLED: my_paths.py\n"
+          "create path object for:"
+          "\nshp_excel_path=''"
+          "\nblock=''"
+          "\nfhcs='' ")
+    exit()
