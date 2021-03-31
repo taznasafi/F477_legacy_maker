@@ -7,12 +7,12 @@ def output_csv(run=False, type=None):
     csv_maker.output_folder = CoverageMaker.int_paths.output_csv_path
     if run:
         if type == "any":
-            csv_maker.in_gdb_path = os.path.join(CoverageMaker.int_paths.output_path,
-                                                 '_04_fhc_ANY_coverages_by_block.gdb')
+            csv_maker.in_gdb_path = os.path.join(CoverageMaker.CoverageMaker.base_output_folder,
+                                                 '_04_Interset_any_diss_merge_June_f477_legacy_provider.gdb')
             csv_maker.export_csv()
         elif type == 'lte':
-            csv_maker.in_gdb_path = os.path.join(CoverageMaker.int_paths.output_path,
-                                                 '_04_fhc_LTE_coverages_by_block.gdb')
+            csv_maker.in_gdb_path = os.path.join(CoverageMaker.CoverageMaker.base_output_folder,
+                                                 '_05_Interset_LTE_merge_June_f477_legacy_provider.gdb')
             csv_maker.export_csv()
         else:
             print("Specify type either as 'any' or 'lte'")

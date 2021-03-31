@@ -35,7 +35,7 @@ class CoverageMaker:
             arcpy.CreateFileGDB_management(out_folder_path=self.output_folder, out_name=self.out_gdb_name)
             # print(arcpy.GetMessages(0))
         else:
-            print("GDB Exists")
+            print("GDB Exists: {}.gdb".format(self.out_gdb_name))
 
     @logger.arcpy_exception(logger.create_error_logger())
     @logger.event_logger(logger.create_logger())
@@ -74,33 +74,37 @@ class CoverageMaker:
     @logger.event_logger(logger.create_logger())
     def repair_geom(self):
 
-        shp_dic = get_path.pathFinder.get_shapefile_path_walk_dict(int_paths.zipfolder_path)
+        fc_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()
         # print(shp_dic)
         error_file = {}
-        for basepath, shp in shp_dic.items():
-            print(shp)
+        for fc in fc_list:
+            print(fc)
             try:
 
-                arcpy.RepairGeometry_management(in_features=os.path.join(basepath, shp[0]))
+                arcpy.RepairGeometry_management(in_features=fc)
                 print(arcpy.GetMessages(0))
 
             except:
 
                 print("there was some kind of error")
                 print(arcpy.GetMessages())
-                error_file[os.path.join(basepath, shp[0])] = [print(arcpy.GetMessages())]
-        pd.DataFrame.from_dict(error_file,).to_csv(os.path.join(int_paths.output_path,
+                error_file["geometry error"] = [fc]
+        pd.DataFrame.from_dict(error_file).to_csv(os.path.join(int_paths.output_path,
                                                                'shapefile_cannot_be_repairted.csv'))
 
     @classmethod
-    def filename_replacer(cls, file_name):
-        path, fname = os.path.split(file_name)
+    def filename_replacer(cls, file_path, regex=None):
+        path, fname = os.path.split(file_path)
         print(fname)
-        regex = r"(\.)(?!(\.*shp))"
+        if regex is not None:
+            pattern = regex
+        else:
+
+            pattern = r"([(]|[)]|(\.)|([-])|(\s))(?![^.]+$)"
         test_str = fname
         subst = "_"
         # You can manually specify the number of replacements by changing the 4th argument
-        result = re.sub(regex, subst, test_str, 0, re.MULTILINE)
+        result = re.sub(pattern, subst, test_str, 0, re.MULTILINE)
 
         if result:
             return os.path.join(path, result)
@@ -109,22 +113,25 @@ class CoverageMaker:
 
     @logger.arcpy_exception(logger.create_error_logger())
     @logger.event_logger(logger.create_logger())
-    def repair_zip_name(self):
+    def repair_shape_file_name(self):
         print('repairing shp names')
         shp_dic = get_path.pathFinder.get_shapefile_path_walk_dict(int_paths.zipfolder_path)
         # print(shp_dic)
 
         for basepath, shp in shp_dic.items():
             input_path = os.path.join(basepath, shp[0])
-            output_path = CoverageMaker.filename_replacer(os.path.join(basepath, shp[0]))
-            if input_path != output_path:
-                arcpy.Rename_management(input_path, out_data=output_path)
+            desc = arcpy.Describe(input_path)
+            output_name = desc.baseName.replace(".", "_").replace("(", "_").replace(")", '_').replace("-", '_')
+
+            print(input_path, output_name) #Todo: fix this error
+            if not arcpy.Exists(os.path.join(basepath, output_name)):
+                arcpy.Rename_management(input_path, out_data=os.path.join(basepath, output_name))
                 print(arcpy.GetMessages(0))
 
     @logger.arcpy_exception(logger.create_error_logger())
     @logger.event_logger(logger.create_logger())
     def rename_shp_name(self):
-
+        print("renaming_shp")
         shp_dict = get_path.pathFinder.get_shapefile_path_walk_dict(int_paths.zipfolder_path)
 
         for base, shp in shp_dict.items():
@@ -137,7 +144,7 @@ class CoverageMaker:
             output_path = os.path.join(base, "__{}_{}__{}.shp".format(name_dict['pid'],
                                                                       name_dict['pname'],
                                                                       name_dict['lastbit']))
-            if os.path.join(base, shp[0]) != output_path:
+            if not arcpy.Exists(output_path):
                 arcpy.Rename_management(in_data=os.path.join(base, shp[0]),
                                         out_data=output_path)
                 print(arcpy.GetMessages())
@@ -148,11 +155,13 @@ class CoverageMaker:
         shp_dict = get_path.pathFinder.get_shapefile_path_walk_dict(int_paths.zipfolder_path)
         for base, shp in shp_dict.items():
             print(shp)
-            output = os.path.join(self.out_gdb, os.path.join(shp[0].strip(".shp")))
-            print(output)
-            if not arcpy.Exists(output):
-                arcpy.FeatureClassToGeodatabase_conversion(Input_Features=os.path.join(base, shp[0]),
-                                                           Output_Geodatabase=self.out_gdb)
+            output = os.path.join(self.out_gdb, shp[0].strip(".shp").replace(" ", "_"))
+            fixed_output = CoverageMaker.filename_replacer(output)
+            print(fixed_output)
+            if not arcpy.Exists(fixed_output):
+                arcpy.FeatureClassToFeatureClass_conversion(in_features=os.path.join(base, shp[0]),
+                                                            out_path=self.out_gdb,
+                                                            out_name=shp[0].strip(".shp").replace(" ", "_"))
                 print(arcpy.GetMessages(0))
 
     @logger.arcpy_exception(logger.create_error_logger())
@@ -524,36 +533,136 @@ class CoverageMaker:
                                                         dissolve_field=dissolve_list)
                         print(arcpy.GetMessages(0))
 
-    @logger.arcpy_exception(logger.create_error_logger())
-    @logger.event_logger(logger.create_logger())
-    def merge_any_verizon_coverage(self, wildcard ="*p*_*_dissolved",  out_fc_name = None):
-
-        fc_list_p1 = get_path.pathFinder(env=self.in_gdb_path).get_file_path_with_wildcard_from_gdb(wildcard=wildcard)
-
-
-        output = os.path.join(self.out_gdb, out_fc_name)
-        if not arcpy.Exists(output):
-            arcpy.Merge_management(inputs=fc_list_p1, output=output)
-            print(arcpy.GetMessages(0))
-
-        # #p2
-        # fc_list_p2 = get_path.pathFinder(env=self.in_gdb_path).get_file_path_with_wildcard_from_gdb(
-        #     wildcard="*p2_*_dissolved")
-        # output = os.path.join(self.out_gdb, "June_2020_F477_70_Verizon_Wireless_merged_p2_dissolved_dissovled")
-        # if not arcpy.Exists(output):
-        #     arcpy.Merge_management(inputs=fc_list_p2, output=output)
-        #     print(arcpy.GetMessages(0))
-
-
-
 
 
     @logger.arcpy_exception(logger.create_error_logger())
     @logger.event_logger(logger.create_logger())
-    def intersect_coverage_service_area_fc(self):
+    def create_any_coverage(self):
+
+        # 1. create merged coverage in memory of the two parts by state
+        # 2. dissolve the merged by ['pid', 'pname', 'TECHNOLOGY'] tech
+        # 3. dissolve the merged by ['pid', 'pname'] any
+        # 4. merge the 56 nation for 2 and 3
+        # 5. export coverages
+        merged_diss_state_fc_list = []
+        global output_merge
+        try:
+            output_path = os.path.join(self.out_gdb,
+                                       "June_2020_F477_70_Verizon_Wireless_merged__p1_p2_ANY_Coverage_dissolved")
+            if not arcpy.Exists(output_path):
+
+                fc_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()
+                state_list = get_path.pathFinder.make_fips_list()
+
+
+                for state in state_list:
+                    print(state)
+                    print("merging")
+                    merge_fc = get_path.pathFinder.filter_List_of_featureclass_paths_with_wildcard(fc_list, "*_p*_{}".format(state))
+                    if len(merge_fc) != 0:
+                        print(merge_fc)
+                        output_merge = 'in_memory/merged_fc_{}'.format(state)
+                        arcpy.Merge_management(merge_fc, output_merge)
+
+                        print("dissolving")
+                        output_diss = 'in_memory/diss_fc_{}'.format(state)
+                        arcpy.PairwiseDissolve_analysis(output_merge,dissolve_field=['pid', 'pname'], out_feature_class=output_diss)
+                        merged_diss_state_fc_list.append(output_diss)
+                        arcpy.Delete_management(output_merge)
+
+                print("merging nation wide")
+                arcpy.Merge_management(inputs=merged_diss_state_fc_list, output="in_memory/nationwide_merge")
+
+                print("Final diss of nation wide")
+
+                arcpy.PairwiseDissolve_analysis("in_memory/nationwide_merge", out_feature_class='in_memory/nationwide_merge_diss',dissolve_field=['pid', 'pname'])
+                print('dissolving one more time')
+                arcpy.PairwiseDissolve_analysis("in_memory/nationwide_merge_diss", out_feature_class=output_path,
+                                          dissolve_field=['pid', 'pname'])
+                print(arcpy.GetMessages())
+                arcpy.Delete_management("in_memory/nationwide_merge")
+                arcpy.Delete_management("in_memory/nationwide_merge_diss")
+
+                for x in merged_diss_state_fc_list:
+                    arcpy.Delete_management(x)
+        except:
+            arcpy.Delete_management(output_merge)
+            arcpy.Delete_management("in_memory/nationwide_merge")
+            for x in merged_diss_state_fc_list:
+                arcpy.Delete_management(x)
+
+
+    @logger.arcpy_exception(logger.create_error_logger())
+    @logger.event_logger(logger.create_logger())
+    def create_tech_coverage(self, wildcard ="*p*_*_dissolved",  out_fc_name = None):
+
+        # 1. create merged coverage in memory of the two parts by state
+        # 2. dissolve the merged by ['pid', 'pname', 'TECHNOLOGY'] tech
+        # 4. merge the 56 nation
+        # 5. export coverages
+        merged_diss_state_fc_list = []
+        global output_merge
+        try:
+            output_path = os.path.join(self.out_gdb,
+                                       "June_2020_F477_70_Verizon_Wireless_merged__p1_p2_by_tech_dissolved")
+
+            if not arcpy.Exists(output_path):
+                fc_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()
+                state_list = get_path.pathFinder.make_fips_list()
+
+
+
+                for state in state_list:
+                    print(state)
+                    print("merging")
+                    merge_fc = get_path.pathFinder.filter_List_of_featureclass_paths_with_wildcard(fc_list,
+                                                                                                   "*_p*_{}".format(state))
+                    if len(merge_fc) != 0:
+                        print(merge_fc)
+                        output_merge = 'in_memory/merged_fc_{}'.format(state)
+                        arcpy.Merge_management(merge_fc, output_merge)
+
+                        print("dissolving")
+                        output_diss = 'in_memory/diss_fc_{}'.format(state)
+                        arcpy.PairwiseDissolve_analysis(output_merge, dissolve_field=['pid', 'pname', 'TECHNOLOGY'], out_feature_class=output_diss)
+                        merged_diss_state_fc_list.append(output_diss)
+                        arcpy.Delete_management(output_merge)
+
+                print("merging nation wide")
+                arcpy.Merge_management(inputs=merged_diss_state_fc_list, output="in_memory/nationwide_merge")
+
+
+                # print("Final diss of nation wide")
+                #
+                # arcpy.PairwiseDissolve_analysis("in_memory/nationwide_merge", out_feature_class='in_memory/nationwide_merge_diss',dissolve_field=['pid', 'pname', 'TECHNOLOGY'])
+                print('dissolving one more time')
+                arcpy.PairwiseDissolve_analysis("in_memory/nationwide_merge", out_feature_class=output_path,
+                                          dissolve_field=['pid', 'pname', 'TECHNOLOGY'])
+                print(arcpy.GetMessages())
+                arcpy.Delete_management("in_memory/nationwide_merge")
+                arcpy.Delete_management("in_memory/nationwide_merge_diss")
+
+
+                for x in merged_diss_state_fc_list:
+                    arcpy.Delete_management(x)
+        except:
+            arcpy.Delete_management(output_merge)
+            arcpy.Delete_management("in_memory/nationwide_merge")
+            for x in merged_diss_state_fc_list:
+                arcpy.Delete_management(x)
+
+
+
+
+
+
+
+    @logger.arcpy_exception(logger.create_error_logger())
+    @logger.event_logger(logger.create_logger())
+    def intersect_coverage_service_area_fc(self, suffix="_"):
 
         fc_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()
-        service_area_list = get_path.pathFinder(env=my_paths.fhcs).get_path_for_all_feature_from_gdb()
+        service_area_list = get_path.pathFinder(env=os.path.join(self.base_input_folder, "_input_fhcs_by_block.gdb")).get_path_for_all_feature_from_gdb()
 
         for fc in fc_list:
             print(fc)
@@ -562,12 +671,12 @@ class CoverageMaker:
                 pattern=r'(\w.+)_(?P<pid>\d{1,3})_(?P<pname>\w.+)',
                 string=fc).groupdict()
 
-            wildcard_fc = get_path.pathFinder.filter_List_of_featureclass_paths_with_wildcard(path_link_list=service_area_list,
-                                                                                           wildcard="fhcs_us_{}_*".format(name_dict['pid']))
-            for wfc in wildcard_fc:
+            wildcard_fhcs = get_path.pathFinder.filter_List_of_featureclass_paths_with_wildcard(path_link_list=service_area_list,
+                                                                                           wildcard="fhcs_*_{}_*".format(name_dict['pid'])) #todo:rename the wildcard
+            for wfc in wildcard_fhcs:
 
 
-                output = os.path.join(self.out_gdb, os.path.basename(wfc) + '_service_area_intersect')
+                output = os.path.join(self.out_gdb, os.path.basename(wfc) + '_service_area_intersect{}'.format(suffix))
                 if not arcpy.Exists(output):
                     arcpy.PairwiseIntersect_analysis(in_features=[fc, wfc], out_feature_class=output)
                     print(arcpy.GetMessages())
@@ -628,20 +737,17 @@ class CoverageMaker:
 
         for fc in fc_list:
             print(fc)
-            if os.path.basename(fc) == "June_2020_F477_70_Verizon_Wireless_merged_dissolved_LTE":
-                pass
+
+            lte = arcpy.MakeFeatureLayer_management(fc, 'temp', """"TECHNOLOGY"=83""")
+
+            output = os.path.join(self.out_gdb, os.path.basename(fc)+"_LTE")
+
+            if not arcpy.Exists(output):
+                arcpy.CopyFeatures_management(in_features=lte, out_feature_class=output)
+                print(arcpy.GetMessages())
+                arcpy.Delete_management('temp')
             else:
-
-                lte = arcpy.MakeFeatureLayer_management(fc, 'temp', """"TECHNOLOGY"=83""")
-
-                output = os.path.join(self.out_gdb, os.path.basename(fc)+"_LTE")
-
-                if not arcpy.Exists(output):
-                    arcpy.CopyFeatures_management(in_features=lte, out_feature_class=output)
-                    print(arcpy.GetMessages())
-                    arcpy.Delete_management('temp')
-                else:
-                    arcpy.Delete_management('temp')
+                arcpy.Delete_management('temp')
 
     @logger.arcpy_exception(logger.create_error_logger())
     @logger.event_logger(logger.create_logger())
@@ -662,6 +768,55 @@ class CoverageMaker:
 
     @logger.arcpy_exception(logger.create_error_logger())
     @logger.event_logger(logger.create_logger())
+    def make_fhcs(self):
+
+        block_list = get_path.pathFinder(env=self.in_gdb_2_path).get_path_for_all_feature_from_gdb()
+        fhcs_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()
+
+        state_list = get_path.pathFinder.make_fips_list()
+
+        for state in state_list:
+            print(state)
+            filter_fhcs_list = get_path.pathFinder.filter_List_of_featureclass_paths_with_wildcard(fhcs_list, wildcard="fhcs_{}_*".format(state))
+            filter_block_list = get_path.pathFinder.filter_List_of_featureclass_paths_with_wildcard(block_list, wildcard="*_{}_*".format(state))
+            
+            if len(filter_fhcs_list)>0:
+                for fc in filter_fhcs_list:
+                    print(fc)
+                    output = os.path.join(self.out_gdb, os.path.basename(fc))
+                    if not arcpy.Exists(output):
+                        arcpy.PairwiseIntersect_analysis([filter_block_list[0], fc], out_feature_class=output)
+                        print(arcpy.GetMessages())
+
+
+    @logger.arcpy_exception(logger.create_error_logger())
+    @logger.event_logger(logger.create_logger())
+    def batch_calculate_area(self, field_name=None, expression=None):
+
+        if field_name is None or expression is None:
+            print("please specify field name or expression")
+        else:
+            fc_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()
+
+            for fc in fc_list:
+                print(fc)
+                arcpy.CalculateField_management(in_table=fc, field=field_name, expression=expression,expression_type="PYTHON3")
+
+    @logger.arcpy_exception(logger.create_error_logger())
+    @logger.event_logger(logger.create_logger())
+    def batch_add_field(self, field_name=None,field_type=None):
+
+        if field_name is None or field_type is None:
+            print("please specify field name or field_type")
+        else:
+            fc_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()
+
+            for fc in fc_list:
+                print(fc)
+                arcpy.AddField_management(in_table=fc, field_name=field_name, field_type=field_type)
+
+    @logger.arcpy_exception(logger.create_error_logger())
+    @logger.event_logger(logger.create_logger())
     def intersect_block(self, wildcard, post_fix):
 
         fc_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()
@@ -677,7 +832,6 @@ class CoverageMaker:
                 if not arcpy.Exists(output):
                     arcpy.PairwiseIntersect_analysis(in_features=[block, fc],out_feature_class=output)
                     print(arcpy.GetMessages())
-
     def export_csv(self):
         import csv
         fc_list = get_path.pathFinder(env=self.in_gdb_path).get_path_for_all_feature_from_gdb()

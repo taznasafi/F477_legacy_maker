@@ -69,20 +69,16 @@ def process_fc(run=False, merger=False, disovler=False, any_disovler=False, tmo_
             vrz.delete_empty_fc() # delete empty fc from input gdb
 
             #any coverage
-            vrz.diss_vrz_coverage_by_state(dissolve_list=['pid', 'pname']) #dissovled verizon coverages to create any coverage by state
-            vrz.in_gdb_path = vrz.out_gdb # declare input gdb same as it self
-            vrz.merge_any_verizon_coverage(wildcard="*_dissolved", out_fc_name="June_2020_F477_70_Verizon_Wireless_merged__p1_p2_any_coverage") # merge the any coverage by state
-            vrz.out_gdb = diss_any.out_gdb # declare vrz output gdb to any diss gdb
-            vrz.dissolve_fc(dissolve_list=['pid', 'pname'], wildcard="*_any_coverage") # get rid of of potential over lapping polygons of any coverage
+            vrz.in_gdb_path = vrz.out_gdb
+            vrz.out_gdb = diss_any.out_gdb
+            vrz.create_any_coverage()
 
-            # get overlapping technologies by dissovleing
-            vrz.out_gdb = vrz.in_gdb_path# declare input gdb same as it self
-            vrz.diss_vrz_coverage_by_state(dissolve_list=['pid', 'pname', "TECHNOLOGY"], postfix="_by_tech") #dissovled verizon coverages by technology by state
-            vrz.in_gdb_path = vrz.out_gdb # declare input gdb same as it self
-            vrz.merge_any_verizon_coverage(wildcard="*_by_tech", out_fc_name="June_2020_F477_70_Verizon_Wireless_merged__p1_p2_by_tech")
-            vrz.out_gdb = diss.out_gdb  # declare input gdb same as it self
-            vrz.dissolve_fc(dissolve_list=['pid', 'pname', 'TECHNOLOGY'],
-                            wildcard="*_p1_p2_by_tech")  # get rid of of potential over lapping polygons of tech
+            #dissovle coveages by tech
+            vrz.out_gdb = diss.out_gdb
+            vrz.in_gdb_path = os.path.join(vrz.output_folder, vrz.out_gdb_name + ".gdb")
+            vrz.create_tech_coverage()
+
+
 
         if any_disovler:
             diss_any.in_gdb_path = diss.out_gdb

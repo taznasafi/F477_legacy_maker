@@ -25,13 +25,18 @@ def extract_zipfiles(run=False, copy_from_k=False, unzip=False):
 
             for file_path, pid, pname in zip(recippient['file_path'], recippient['provider_id'], recippient['provider_name']):
                 print(file_path)
-                unzipper.Unzipper.copy_zip_file(file_path,
-                            os.path.join(CoverageMaker.int_paths.zipfolder_path, "__{}_{}__{}".format(pid,
+
+                if not os.path.exists(os.path.join(CoverageMaker.int_paths.zipfolder_path, "__{}_{}__{}".format(pid,
                                                                                                       pname,
-                                                                                                      os.path.basename(file_path))))
+                                                                                                      os.path.basename(file_path)))):
+
+                    unzipper.Unzipper().copy_zip_file(src=file_path,
+                                dist=os.path.join(CoverageMaker.int_paths.zipfolder_path, "__{}_{}__{}".format(pid,
+                                                                                                          pname,
+                                                                                                          os.path.basename(file_path))))
 
         if unzip is True:
 
             print('unzipping')
             unzipper.Unzipper(base_input_folder=CoverageMaker.int_paths.zipfolder_path,
-                              base_output_folder=CoverageMaker.int_paths.zipfolder_path).unzip(list=True, wildcard="*")
+                              base_output_folder=CoverageMaker.int_paths.zipfolder_path).unzip(list=True, wildcard="*.zip")

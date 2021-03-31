@@ -176,7 +176,7 @@ class pathFinder:
 
 
     @classmethod
-    def get_shapefile_path_walk_dict(cls, path):
+    def get_shapefile_path_walk_dict(cls, path, ):
 
 
         file_dict = defaultdict(list)
